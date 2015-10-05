@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 
 using System.IO;
 using System.Collections;
+using System.Threading;
 
 namespace FileExplorer
 {
@@ -26,8 +27,22 @@ namespace FileExplorer
                 FilesInfoList = null;
                 return false;
             }
+            List<FileInfo> myFileInfoList = new List<FileInfo>();
+            try
+            {
+                Thread readThread = new Thread(delegate ()
+                {
+                    myFileInfoList = GetDirectoryFilesInfo(SourcePath);
+                }); readThread.Start(); readThread.Join();
+            }
+            catch (Exception ex)
+            {
+                FilesInfoList = null;
+                ExecuteMessage = "Get files Info Failure. " + ex.ToString();
+                return false;
+            }
 
-            FilesInfoList = GetDirectoryFilesInfo(SourcePath);
+            FilesInfoList = myFileInfoList;
             if (FilesInfoList.Count < 1)
             {
                 ExecuteMessage = "No file in directory " + SourcePath;
@@ -66,17 +81,65 @@ namespace FileExplorer
             return myFilesInfoList;
         }
 
-        public bool SaveFilesInfoToTxt(string saveFilePath, List<FileInfo> filesInfoList, out string executeMessage)
+        public static bool SaveFilesInfoToTxt(string saveFilePath, List<FileInfo> filesInfoList, out string executeMessage)
         {
             if(filesInfoList==null || filesInfoList.Count<1)
             {
                 executeMessage = "No infomation to save.";
                 return false;
             }
-            foreach(FileInfo f in filesInfoList)
+            string partExecuteMessage;
+            if (!CheckCreateSaveFile(saveFilePath, out partExecuteMessage))
             {
-
+                executeMessage = "Check file failure or Create File failure ";
+                return false;
             }
+            try
+            {
+                Thread writeThread = new Thread(delegate ()
+                {
+                    StreamWriter sw = new StreamWriter(saveFilePath, false, Encoding.Unicode);
+                    foreach (FileInfo f in filesInfoList)
+                    {
+                        sw.WriteLine(f.FullName + ",    " + f.CreationTime + ",    " + f.LastWriteTime + ",    " + f.Length);
+                    }
+                }
+                );writeThread.Start();writeThread.Join();
+                executeMessage = "saveFile successfully.";
+                return true;
+            }
+            catch (Exception ex)
+            {
+                executeMessage = "save Files failure. " + ex.ToString();
+                return false;
+            }
+            
+        }
+
+        private static bool CheckCreateSaveFile(string saveFilePath, out string partExecuteMessage)
+        {
+            if(File.Exists(saveFilePath))
+            {
+                partExecuteMessage = string.Empty;
+                return true;
+            }
+            else
+            {
+                try
+                {
+                    FileStream fs = File.Create(saveFilePath);
+                    fs.Close();
+                    partExecuteMessage = "Create file successfully.";
+                    return true;
+                }
+                catch (Exception ex)
+                {
+                    partExecuteMessage = "Create file failure. " + ex.ToString();
+                    return false;
+                }
+                
+            }
+
         }
     }
 }
